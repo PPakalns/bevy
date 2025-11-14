@@ -1,7 +1,7 @@
 use crate::{
     experimental::{UiChildren, UiRootNodes},
     ui_transform::UiGlobalTransform,
-    CalculatedClip, ComputedNode, Display, FixedNode, Node, OverrideClip,
+    CalculatedClip, ComputedNode, Display, FixedNode, IgnoreParentClip, Node, OverrideClip,
 };
 use bevy_ecs::{
     entity::Entity,
@@ -20,6 +20,7 @@ pub fn update_clipping_system(
         Option<&mut CalculatedClip>,
         Has<OverrideClip>,
         Has<FixedNode>,
+        Has<IgnoreParentClip>,
     )>,
     ui_children: UiChildren,
 ) {
@@ -29,6 +30,7 @@ pub fn update_clipping_system(
             &ui_children,
             &mut node_query,
             root_node,
+            None,
             None,
         );
     }
@@ -44,8 +46,10 @@ fn update_clipping(
         Option<&mut CalculatedClip>,
         Has<OverrideClip>,
         Has<FixedNode>,
+        Has<IgnoreParentClip>,
     )>,
     entity: Entity,
+    maybe_grandparent_inherited_clip: Option<CalculatedClip>,
     mut maybe_inherited_clip: Option<CalculatedClip>,
 ) {
     let Ok((
@@ -55,10 +59,15 @@ fn update_clipping(
         maybe_calculated_clip,
         has_override_clip,
         has_fixed_node,
+        has_ignore_parent_clip,
     )) = node_query.get_mut(entity)
     else {
         return;
     };
+
+    if has_ignore_parent_clip {
+        maybe_inherited_clip = maybe_grandparent_inherited_clip;
+    }
 
     // If the UI node entity has an `OverrideClip` or `FixedNode` component, discard any inherited clip rect
     if has_override_clip || has_fixed_node {
@@ -93,9 +102,9 @@ fn update_clipping(
         || node.overflow.is_visible()
     {
         // The current node doesn't clip, propagate the optional inherited clipping rect to any children
-        maybe_inherited_clip
+        maybe_inherited_clip.clone()
     } else if let Some(clip_from_world) = transform.try_inverse() {
-        let mut clip = maybe_inherited_clip.unwrap_or_default();
+        let mut clip = maybe_inherited_clip.clone().unwrap_or_default();
         clip.push_rect(
             computed_node.resolve_clip_rect(node.overflow, node.overflow_clip_margin),
             clip_from_world,
@@ -111,6 +120,7 @@ fn update_clipping(
             ui_children,
             node_query,
             child,
+            maybe_inherited_clip.clone(),
             children_clip.clone(),
         );
     }
