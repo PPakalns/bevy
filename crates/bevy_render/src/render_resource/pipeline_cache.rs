@@ -2,10 +2,11 @@ use bevy_material::descriptor::{
     BindGroupLayoutDescriptor, CachedComputePipelineId, CachedRenderPipelineId,
     ComputePipelineDescriptor, PipelineDescriptor, RenderPipelineDescriptor,
 };
+use smallvec::SmallVec;
 
 use crate::{
     render_resource::*,
-    renderer::{RenderAdapter, RenderDevice, WgpuWrapper},
+    renderer::{wgpu_wrapper, RenderAdapter, RenderDevice},
     Extract,
 };
 use alloc::{borrow::Cow, sync::Arc};
@@ -79,11 +80,24 @@ impl CachedPipelineState {
     }
 }
 
+// The default webgpu `max_bind_groups` is 4. Most desktop GPUs support 8.
+// Since the element size we used below is small, we inline 8 on the stack.
+const BIND_GROUP_LAYOUTS_INLINE_CAPACITY: usize = 8;
+
 type ImmediateSize = u32;
-type LayoutCacheKey = (Vec<BindGroupLayoutId>, ImmediateSize);
+type LayoutCacheKey = (
+    SmallVec<[BindGroupLayoutId; BIND_GROUP_LAYOUTS_INLINE_CAPACITY]>,
+    ImmediateSize,
+);
+
+wgpu_wrapper! {
+    struct WgpuPipelineLayout(PipelineLayout);
+
+    struct WgpuShaderModule(ShaderModule);
+}
 #[derive(Default)]
 struct LayoutCache {
-    layouts: HashMap<LayoutCacheKey, Arc<WgpuWrapper<PipelineLayout>>>,
+    layouts: HashMap<LayoutCacheKey, Arc<WgpuPipelineLayout>>,
 }
 
 impl LayoutCache {
@@ -92,7 +106,7 @@ impl LayoutCache {
         render_device: &RenderDevice,
         bind_group_layouts: &[BindGroupLayout],
         immediate_size: u32,
-    ) -> Arc<WgpuWrapper<PipelineLayout>> {
+    ) -> Arc<WgpuPipelineLayout> {
         let bind_group_ids = bind_group_layouts.iter().map(BindGroupLayout::id).collect();
         self.layouts
             .entry((bind_group_ids, immediate_size))
@@ -101,14 +115,14 @@ impl LayoutCache {
                     .iter()
                     .map(BindGroupLayout::value)
                     .map(Some)
-                    .collect::<Vec<_>>();
-                Arc::new(WgpuWrapper::new(render_device.create_pipeline_layout(
-                    &PipelineLayoutDescriptor {
+                    .collect::<SmallVec<[_; BIND_GROUP_LAYOUTS_INLINE_CAPACITY]>>();
+                Arc::new(WgpuPipelineLayout::new(
+                    render_device.create_pipeline_layout(&PipelineLayoutDescriptor {
                         bind_group_layouts: &bind_group_layouts,
                         immediate_size: *immediate_size,
                         ..default()
-                    },
-                )))
+                    }),
+                ))
             })
             .clone()
     }
@@ -118,7 +132,7 @@ fn load_module(
     render_device: &RenderDevice,
     shader_source: ShaderCacheSource,
     validate_shader: &ValidateShader,
-) -> Result<WgpuWrapper<ShaderModule>, ShaderCacheError> {
+) -> Result<WgpuShaderModule, ShaderCacheError> {
     let shader_source = match shader_source {
         #[cfg(feature = "shader_format_spirv")]
         ShaderCacheSource::SpirV(data) => wgpu::util::make_spirv(data),
@@ -139,7 +153,7 @@ fn load_module(
         .wgpu_device()
         .push_error_scope(wgpu::ErrorFilter::Validation);
 
-    let shader_module = WgpuWrapper::new(match validate_shader {
+    let shader_module = WgpuShaderModule::new(match validate_shader {
         ValidateShader::Enabled => {
             render_device.create_and_validate_shader_module(module_descriptor)
         }
@@ -203,7 +217,7 @@ impl BindGroupLayoutCache {
 pub struct PipelineCache {
     layout_cache: Arc<Mutex<LayoutCache>>,
     bindgroup_layout_cache: Arc<Mutex<BindGroupLayoutCache>>,
-    shader_cache: Arc<Mutex<ShaderCache<WgpuWrapper<ShaderModule>, RenderDevice>>>,
+    shader_cache: Arc<Mutex<ShaderCache<WgpuShaderModule, RenderDevice>>>,
     device: RenderDevice,
     pipelines: Vec<CachedPipeline>,
     waiting_pipelines: HashSet<CachedPipelineId>,

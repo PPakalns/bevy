@@ -1,5 +1,5 @@
 use crate::camera::extract_cameras;
-use crate::renderer::WgpuWrapper;
+use crate::renderer::wgpu_wrapper;
 use crate::{
     render_resource::{SurfaceTexture, TextureView},
     renderer::{RenderAdapter, RenderDevice, RenderInstance},
@@ -199,9 +199,11 @@ fn extract_windows(
     }
 }
 
+// TODO: what lifetime should this be?
+wgpu_wrapper!(struct WgpuSurface(wgpu::Surface<'static>));
+
 struct SurfaceData {
-    // TODO: what lifetime should this be?
-    surface: WgpuWrapper<wgpu::Surface<'static>>,
+    surface: WgpuSurface,
     configuration: SurfaceConfiguration,
     texture_view_format: Option<TextureFormat>,
 }
@@ -438,7 +440,7 @@ pub fn create_surfaces(
                 render_device.configure_surface(&surface, &configuration);
 
                 SurfaceData {
-                    surface: WgpuWrapper::new(surface),
+                    surface: WgpuSurface::new(surface),
                     configuration,
                     texture_view_format,
                 }
