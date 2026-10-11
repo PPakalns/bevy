@@ -248,9 +248,6 @@ pub(crate) struct ComponentTicksMut<'w> {
     pub(crate) changed_by: MaybeLocation<&'w mut &'static Location<'static>>,
     pub(crate) last_run: Tick,
     pub(crate) this_run: Tick,
-    /// A reference to the summary tick for the component, if the component is
-    /// dense and has a summary tick.
-    pub(crate) summary_tick: Option<&'w AtomicTick>,
 }
 
 impl<'w> ComponentTicksMut<'w> {
@@ -271,7 +268,6 @@ impl<'w> ComponentTicksMut<'w> {
             changed_by: unsafe { cells.changed_by.map(|changed_by| changed_by.deref_mut()) },
             last_run,
             this_run,
-            summary_tick: cells.summary_tick,
         }
     }
 }
@@ -1033,9 +1029,6 @@ impl<'w, T: ?Sized> Mut<'w, T> {
     /// - `last_changed` - A [`Tick`] that stores the last time the wrapped value was changed.
     ///   This will be updated to the value of `change_tick` if the returned smart pointer
     ///   is modified.
-    /// - `summary_tick` - A [`Tick`] that stores the most recent changed
-    ///   timestamp that was written to any component instance in the column.
-    ///   "Most recent" refers to the wall clock.
     /// - `last_run` - A [`Tick`], occurring before `this_run`, which is used
     ///   as a reference to determine whether the wrapped value is newly added or changed.
     /// - `this_run` - A [`Tick`] corresponding to the current point in time -- "now".
@@ -1043,7 +1036,6 @@ impl<'w, T: ?Sized> Mut<'w, T> {
         value: &'w mut T,
         added: &'w mut Tick,
         last_changed: &'w mut Tick,
-        summary_tick: Option<&'w AtomicTick>,
         last_run: Tick,
         this_run: Tick,
         caller: MaybeLocation<&'w mut &'static Location<'static>>,
@@ -1056,7 +1048,6 @@ impl<'w, T: ?Sized> Mut<'w, T> {
                 changed_by: caller,
                 last_run,
                 this_run,
-                summary_tick,
             },
         }
     }
@@ -1391,7 +1382,6 @@ impl<'w> MutUntyped<'w> {
                 changed_by: self.ticks.changed_by.as_deref_mut(),
                 last_run: self.ticks.last_run,
                 this_run: self.ticks.this_run,
-                summary_tick: self.ticks.summary_tick,
             },
         }
     }
