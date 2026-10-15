@@ -1,6 +1,6 @@
 use crate::{
     layout_tree::ComputedLayout, ui_transform::UiGlobalTransform, CalculatedClip, Display,
-    FixedNode, GhostNode, Node, OverrideClip, UiRoots, UiTreeDirty,
+    FixedNode, GhostNode, IgnoreParentClip, Node, OverrideClip, UiRoots, UiTreeDirty,
 };
 
 use super::ComputedNode;
@@ -33,6 +33,7 @@ pub fn update_clipping_system(
         Has<FixedNode>,
         Has<GhostNode>,
         Ref<UiTreeDirty>,
+        Has<IgnoreParentClip>,
     )>,
     ui_children: Query<&Children, With<Node>>,
 ) {
@@ -42,6 +43,7 @@ pub fn update_clipping_system(
             &ui_children,
             &mut node_query,
             root_node,
+            None,
             None,
             false,
             true,
@@ -62,8 +64,10 @@ fn update_clipping(
         Has<FixedNode>,
         Has<GhostNode>,
         Ref<UiTreeDirty>,
+        Has<IgnoreParentClip>,
     )>,
     entity: Entity,
+    maybe_grandparent_inherited_clip: Option<CalculatedClip>,
     mut maybe_inherited_clip: Option<CalculatedClip>,
     force_update: bool,
     is_root: bool,
@@ -78,6 +82,7 @@ fn update_clipping(
         has_fixed_node,
         has_ghost_node,
         tree_changed,
+        has_ignore_parent_clip,
     )) = node_query.get_mut(entity)
     else {
         return;
@@ -95,6 +100,10 @@ fn update_clipping(
         && !computed_layout.subtree_dirty()
     {
         return;
+    }
+
+    if has_ignore_parent_clip {
+        maybe_inherited_clip = maybe_grandparent_inherited_clip;
     }
 
     // If the UI node entity has an `OverrideClip`, discard any inherited clip rect
@@ -125,16 +134,16 @@ fn update_clipping(
 
     // Calculate new clip rectangle for children nodes
     let children_clip = if has_ghost_node {
-        maybe_inherited_clip
+        maybe_inherited_clip.clone()
     } else if maybe_inherited_clip
         .as_ref()
         .is_some_and(CalculatedClip::is_fully_clipped)
         || node.overflow.is_visible()
     {
         // The current node doesn't clip, propagate the optional inherited clipping rect to any children
-        maybe_inherited_clip
+        maybe_inherited_clip.clone()
     } else if let Some(clip_from_world) = transform.try_inverse() {
-        let mut clip = maybe_inherited_clip.unwrap_or_default();
+        let mut clip = maybe_inherited_clip.clone().unwrap_or_default();
         clip.push_rect(
             computed_node.resolve_clip_rect(node.overflow, node.overflow_clip_margin),
             clip_from_world,
@@ -154,6 +163,7 @@ fn update_clipping(
             ui_children,
             node_query,
             child,
+            maybe_inherited_clip.clone(),
             children_clip.clone(),
             propagated_force_update,
             false,
