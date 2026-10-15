@@ -827,7 +827,7 @@ pub(crate) mod tests {
     fn info() -> Result<Reply, BrpClientError> {
         Ok(Reply::Info(
             serde_json::from_value(
-                json!({ "app_name": "demo", "bevy_version": "0.20.0-dev", "sub_app": "main" }),
+                json!({ "app_name": "demo", "bevy_version": "0.20.0", "sub_app": "main" }),
             )
             .unwrap(),
         ))
@@ -837,7 +837,7 @@ pub(crate) mod tests {
         RemoteConnection {
             state: RemoteConnectionState::Connected {
                 app_name: "demo".to_string(),
-                bevy_version: "0.20.0-dev".to_string(),
+                bevy_version: "0.20.0".to_string(),
             },
             client: Some(BrpClient::localhost(1)),
             ..RemoteConnection::default()
@@ -1333,7 +1333,7 @@ pub(crate) mod tests {
             connection.state,
             RemoteConnectionState::Connected {
                 app_name: "demo".to_string(),
-                bevy_version: "0.20.0-dev".to_string(),
+                bevy_version: "0.20.0".to_string(),
             }
         );
     }
