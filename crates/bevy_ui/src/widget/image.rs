@@ -9,7 +9,7 @@ use bevy_image::{prelude::*, TRANSPARENT_IMAGE_HANDLE};
 use bevy_math::{Rect, UVec2, Vec2};
 use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_sprite::TextureSlicer;
-use taffy::{MaybeMath, ResolveOrZero};
+use taffy::{CoreStyle, MaybeMath, ResolveOrZero};
 
 /// A UI Node that renders an image.
 #[derive(Component, Clone, Debug, Reflect, FromTemplate)]
@@ -278,14 +278,14 @@ impl Measure for ImageMeasure {
         let mut height = measure_args.resolve_height();
 
         let calc = |_, _| 0.;
-        let padding = measure_args.style.padding.resolve_or_zero(
+        let padding = measure_args.style.padding().resolve_or_zero(
             taffy::Size {
                 width: width.effective,
                 height: height.effective,
             },
             calc,
         );
-        let border = measure_args.style.border.resolve_or_zero(
+        let border = measure_args.style.border().resolve_or_zero(
             taffy::Size {
                 width: width.effective,
                 height: height.effective,
@@ -297,7 +297,7 @@ impl Measure for ImageMeasure {
             padding.top + padding.bottom + border.top + border.bottom,
         );
 
-        if measure_args.style.box_sizing == taffy::style::BoxSizing::BorderBox {
+        if measure_args.style.box_sizing() == taffy::style::BoxSizing::BorderBox {
             width.min = width.min.map(|min| (min - content_inset.x).max(0.));
             width.preferred = width
                 .preferred
@@ -341,7 +341,7 @@ impl Measure for ImageMeasure {
         // Use aspect_ratio from style, fall back to inherent aspect ratio
         let aspect_ratio = measure_args
             .style
-            .aspect_ratio
+            .aspect_ratio()
             .unwrap_or_else(|| self.size.x / self.size.y);
 
         // Apply aspect ratio

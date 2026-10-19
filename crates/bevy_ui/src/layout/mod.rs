@@ -1,5 +1,6 @@
 use crate::{
-    layout_tree::{compute_layout, TaffyStyle},
+    layout_tree::compute_layout,
+    node_style::NodeStyleQuery,
     ui_transform::{UiGlobalTransform, UiTransform},
     ComputedNode, ComputedUiRenderTargetInfo, ContentSize, Display, FixedNode, GhostNode,
     IgnoreScroll, LayoutConfig, Node, Outline, OverflowAxis, OverrideClip, ScrollPosition,
@@ -28,6 +29,7 @@ pub mod clipping;
 mod convert;
 pub mod debug;
 pub mod layout_tree;
+pub mod node_style;
 #[cfg(test)]
 mod tests;
 
@@ -106,7 +108,7 @@ impl LayoutContext {
     };
     /// Create a new [`LayoutContext`] from the window's physical size and scale factor
     #[inline]
-    const fn new(
+    pub(super) const fn new(
         scale_factor: f32,
         physical_size: Vec2,
         em_size: EmSize,
@@ -236,51 +238,20 @@ pub fn sync_font_size_to_em_size(
     }
 }
 
-/// Sync each `Node` with its corresponding `TaffyStyle`.
-///
-/// Runs in [`UiSystems::Layout`](`super::UiSystems::Layout`).
-pub fn sync_taffy_styles_with_nodes(
-    rem_size: Res<RemSize>,
-    mut update_query: Query<(
-        Ref<Node>,
-        Ref<ComputedUiRenderTargetInfo>,
-        Ref<EmSize>,
-        &mut TaffyStyle,
-    )>,
-) {
-    update_query
-        .par_iter_mut()
-        .for_each(|(node, target, em_size, mut taffy_style)| {
-            if node.is_changed()
-                || target.is_changed()
-                || em_size.is_changed()
-                || rem_size.is_changed()
-            {
-                convert::update_taffy_style_from_node(
-                    &node,
-                    &LayoutContext::new(
-                        target.scale_factor(),
-                        target.physical_size().as_vec2(),
-                        *em_size,
-                        *rem_size,
-                    ),
-                    &mut taffy_style,
-                );
-            }
-        });
-}
-
 /// Identify entities whose UI layout input components have been changed, added or removed.
 /// Mark their `UiTreeDirty` component changed, then walk up the tree and mark
 /// each ancestor's `UiTreeDirty` changed.
 ///
 /// Runs in [`UiSystems::Layout`](`super::UiSystems::Layout`).
 pub fn mark_dirty_ui_trees(
+    rem_size: Res<RemSize>,
     changed_ui_components_query: Query<
         Entity,
         (
             Or<(
-                Changed<TaffyStyle>,
+                Changed<Node>,
+                Changed<ComputedUiRenderTargetInfo>,
+                Changed<EmSize>,
                 Changed<ContentSize>,
                 Changed<UiTransform>,
                 Changed<ScrollPosition>,
@@ -311,6 +282,14 @@ pub fn mark_dirty_ui_trees(
         Option<&ChildOf>,
     )>,
 ) {
+    // `Val::Rem` depends on the global `RemSize`, so a change to it dirties every node.
+    if rem_size.is_changed() {
+        for (mut dirty_tree, ..) in &mut trees {
+            dirty_tree.set_changed();
+        }
+        return;
+    }
+
     let removed = removed_outlines
         .read()
         .chain(removed_layout_configs.read())
@@ -355,7 +334,9 @@ pub fn ui_layout_system(
     target_query: Query<Ref<ComputedUiRenderTargetInfo>>,
     node_query: Query<
         (
-            Ref<TaffyStyle>,
+            Ref<Node>,
+            Ref<ComputedUiRenderTargetInfo>,
+            Ref<EmSize>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,
@@ -368,7 +349,7 @@ pub fn ui_layout_system(
         ),
         With<Node>,
     >,
-    style_query: Query<&'static TaffyStyle>,
+    node_style_query: NodeStyleQuery,
     mut node_queries: ParamSet<(
         Query<&mut ComputedLayout>,
         Query<(
@@ -443,7 +424,7 @@ pub fn ui_layout_system(
             target.physical_size(),
             &ui_children,
             &node_query,
-            &style_query,
+            &node_style_query,
             &mut computed_layout_query,
             &fixed_node_changes,
             &mut buffer_query,

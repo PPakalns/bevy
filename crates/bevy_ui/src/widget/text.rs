@@ -24,7 +24,7 @@ use bevy_text::{
     TextFont, TextLayout, TextLayoutInfo, TextMeasureInfo, TextPipeline, TextReader, TextSection,
     TextWriter,
 };
-use taffy::{style::AvailableSpace, MaybeMath, ResolveOrZero};
+use taffy::{style::AvailableSpace, CoreStyle, MaybeMath, ResolveOrZero};
 use tracing::error;
 
 /// UI text system flags.
@@ -213,14 +213,14 @@ impl Measure for TextMeasure {
         } = measure_args;
 
         // The text is wrapped inside the content box, so subtract horizontal padding and border.
-        if style.box_sizing == taffy::style::BoxSizing::BorderBox {
+        if style.box_sizing() == taffy::style::BoxSizing::BorderBox {
             let context = taffy::Size {
                 width: width.effective,
                 height: height.effective,
             };
             let calc = |_, _| 0.;
-            let padding = style.padding.resolve_or_zero(context, calc);
-            let border = style.border.resolve_or_zero(context, calc);
+            let padding = style.padding().resolve_or_zero(context, calc);
+            let border = style.border().resolve_or_zero(context, calc);
             let total_x_inset = padding.left + padding.right + border.left + border.right;
             width.min = width.min.map(|min| (min - total_x_inset).max(0.));
             width.max = width.max.map(|max| (max - total_x_inset).max(0.));

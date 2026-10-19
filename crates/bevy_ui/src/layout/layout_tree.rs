@@ -1,4 +1,3 @@
-use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     change_detection::{DetectChanges, DetectChangesMut},
     component::Component,
@@ -9,94 +8,79 @@ use bevy_ecs::{
     world::Ref,
 };
 use bevy_math::{UVec2, Vec2};
-use bevy_text::{ComputedTextBlock, FontCx};
+use bevy_text::{ComputedTextBlock, EmSize, FontCx};
 use taffy::{
     compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
     compute_hidden_layout, compute_leaf_layout, compute_root_layout, round_layout,
-    style::{AvailableSpace, Display, Style},
+    style::{AvailableSpace, Display},
     Cache, CacheTree, Layout, LayoutBlockContainer, LayoutFlexboxContainer, LayoutGridContainer,
     LayoutInput, LayoutOutput, LayoutPartialTree, NodeId, RoundTree, RunMode, TraversePartialTree,
     TraverseTree,
 };
 
 use crate::{
-    layout::UiTreeDirty, ContentSize, FixedNode, GhostNode, IgnoreScroll, LayoutConfig,
-    LayoutError, Measure, MeasureArgs, Node, NodeMeasure, Outline, OverrideClip, ScrollPosition,
-    UiTransform,
+    layout::UiTreeDirty, AlignContent, AlignItems, AlignSelf, BorderRadius, BoxSizing,
+    ComputedUiRenderTargetInfo, ContentSize, FixedNode, FlexDirection, FlexWrap, GhostNode,
+    GridAutoFlow, GridPlacement, IgnoreScroll, InlineDirection, JustifyContent, JustifyItems,
+    JustifySelf, LayoutConfig, LayoutError, Measure, MeasureArgs, Node, NodeMeasure, Outline,
+    Overflow, OverflowClipMargin, OverrideClip, PositionType, ScrollPosition, UiRect, UiTransform,
+    Val,
 };
 
-#[expect(
-    unsafe_code,
-    reason = "taffy::Style is only thread-unsafe with the calc feature"
-)]
-// SAFETY: taffy::Style is only thread-unsafe with the calc feature
-unsafe impl Send for TaffyStyle {}
+use super::{
+    node_style::{NodeStyle, NodeStyleQuery},
+    LayoutContext,
+};
 
-#[expect(
-    unsafe_code,
-    reason = "taffy::Style is only thread-unsafe with the calc feature"
-)]
-// SAFETY: taffy::Style is only thread-unsafe with the calc feature
-unsafe impl Sync for TaffyStyle {}
-
-#[derive(Default, Component, Clone, Deref, DerefMut)]
-pub struct TaffyStyle(pub Style);
-
-pub static VIEWPORT_NODE_TAFFY_STYLE: TaffyStyle = TaffyStyle(Style {
-    dummy: core::marker::PhantomData,
-    display: Display::Grid,
-    item_is_table: false,
-    item_is_replaced: false,
-    box_sizing: taffy::BoxSizing::BorderBox,
-    direction: taffy::Direction::Ltr,
-    overflow: taffy::Point {
-        x: taffy::Overflow::Visible,
-        y: taffy::Overflow::Visible,
-    },
-    scrollbar_width: 0.0,
-    contain: taffy::Contain::NONE,
-    position: taffy::Position::Relative,
-    inset: taffy::Rect::auto(),
-    size: taffy::Size {
-        width: taffy::Dimension::percent(1.0),
-        height: taffy::Dimension::percent(1.0),
-    },
-    min_size: taffy::Size::auto(),
-    max_size: taffy::Size::auto(),
+const VIEWPORT_NODE: Node = Node {
+    display: crate::Display::Grid,
+    box_sizing: BoxSizing::DEFAULT,
+    direction: InlineDirection::Ltr,
+    overflow: Overflow::DEFAULT,
+    overflow_clip_margin: OverflowClipMargin::DEFAULT,
+    scrollbar_width: 0.,
+    position_type: PositionType::DEFAULT,
+    left: Val::Auto,
+    right: Val::Auto,
+    top: Val::Auto,
+    bottom: Val::Auto,
+    width: Val::Percent(100.0),
+    height: Val::Percent(100.0),
+    min_width: Val::Auto,
+    min_height: Val::Auto,
+    max_width: Val::Auto,
+    max_height: Val::Auto,
     aspect_ratio: None,
-    margin: taffy::Rect::zero(),
-    padding: taffy::Rect::zero(),
-    border: taffy::Rect::zero(),
-    align_items: Some(taffy::AlignItems::START),
-    align_self: None,
-    justify_items: Some(taffy::JustifyItems::START),
-    justify_self: None,
-    align_content: None,
-    justify_content: None,
-    gap: taffy::Size::zero(),
-    text_align: taffy::TextAlign::Auto,
-    flex_direction: taffy::FlexDirection::Row,
-    flex_wrap: taffy::FlexWrap::NoWrap,
-    flex_basis: taffy::Dimension::auto(),
+    margin: UiRect::DEFAULT,
+    padding: UiRect::DEFAULT,
+    border: UiRect::DEFAULT,
+    border_radius: BorderRadius::DEFAULT,
+    align_items: AlignItems::Start,
+    align_self: AlignSelf::DEFAULT,
+    justify_items: JustifyItems::Start,
+    justify_self: JustifySelf::DEFAULT,
+    align_content: AlignContent::DEFAULT,
+    justify_content: JustifyContent::DEFAULT,
+    column_gap: Val::ZERO,
+    row_gap: Val::ZERO,
+    flex_direction: FlexDirection::DEFAULT,
+    flex_wrap: FlexWrap::DEFAULT,
+    flex_basis: Val::Auto,
     flex_grow: 0.0,
     flex_shrink: 1.0,
     grid_template_rows: Vec::new(),
     grid_template_columns: Vec::new(),
     grid_auto_rows: Vec::new(),
     grid_auto_columns: Vec::new(),
-    grid_auto_flow: taffy::GridAutoFlow::Row,
-    grid_template_areas: None,
-    grid_template_column_names: Vec::new(),
-    grid_template_row_names: Vec::new(),
-    grid_row: taffy::Line {
-        start: taffy::GridPlacement::Span(1),
-        end: taffy::GridPlacement::Auto,
-    },
-    grid_column: taffy::Line {
-        start: taffy::GridPlacement::Span(1),
-        end: taffy::GridPlacement::Auto,
-    },
-});
+    grid_auto_flow: GridAutoFlow::DEFAULT,
+    grid_row: GridPlacement::DEFAULT,
+    grid_column: GridPlacement::DEFAULT,
+};
+
+pub(super) const VIEWPORT_NODE_STYLE: NodeStyle<'static> = NodeStyle {
+    node: &VIEWPORT_NODE,
+    context: LayoutContext::DEFAULT,
+};
 
 /// `NodeId`s wrap a `u64` that can be directly converted to and from an `Entity`.
 /// We create and assign the `NodeId`s ourselves in order that each `NodeId` corresponds to an `Entity`.
@@ -304,7 +288,9 @@ pub fn compute_layout<'w, 's>(
     ui_children: &Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
     node_query: &Query<
         (
-            Ref<TaffyStyle>,
+            Ref<Node>,
+            Ref<ComputedUiRenderTargetInfo>,
+            Ref<EmSize>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,
@@ -317,7 +303,7 @@ pub fn compute_layout<'w, 's>(
         ),
         With<Node>,
     >,
-    style_query: &Query<'w, 's, &'static TaffyStyle>,
+    node_style_query: &NodeStyleQuery<'w, 's>,
     computed_layout_query: &mut Query<'w, 's, &'static mut ComputedLayout>,
     fixed_node_changes: &EntityHashSet,
     buffer_query: &mut Query<&mut ComputedTextBlock>,
@@ -326,6 +312,7 @@ pub fn compute_layout<'w, 's>(
     needs_full_walk: bool,
     ghost_stack: &mut Vec<Entity>,
 ) -> Result<(), LayoutError> {
+    let rem_size_changed = node_style_query.rem_size_changed();
     let Some(subtree_state) = sync_layout_tree(
         ui_root_entity,
         ui_root_entity,
@@ -333,6 +320,7 @@ pub fn compute_layout<'w, 's>(
         node_query,
         computed_layout_query,
         fixed_node_changes,
+        rem_size_changed,
         child_stack,
         needs_full_walk,
         ghost_stack,
@@ -355,8 +343,8 @@ pub fn compute_layout<'w, 's>(
         let mut measure_function = |known_dimensions: taffy::Size<Option<f32>>,
                                     available_space: taffy::Size<AvailableSpace>,
                                     entity: Entity,
-                                    style: &Style| {
-            let Ok((_, content_size, ..)) = node_query.get(entity) else {
+                                    style: NodeStyle<'_>| {
+            let Ok((_, _, _, content_size, ..)) = node_query.get(entity) else {
                 return taffy::Size::ZERO;
             };
             let Some(measure) = content_size.measure.as_ref() else {
@@ -389,7 +377,7 @@ pub fn compute_layout<'w, 's>(
         };
 
         let mut tree = UiLayoutTree {
-            style_query,
+            node_style_query,
             computed_layout_query,
             viewport_layout: ViewportLayoutState::default(),
             viewport_children: [root_node_id],
@@ -447,7 +435,9 @@ fn sync_layout_tree(
     ui_children: &Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
     node_query: &Query<
         (
-            Ref<TaffyStyle>,
+            Ref<Node>,
+            Ref<ComputedUiRenderTargetInfo>,
+            Ref<EmSize>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,
@@ -462,12 +452,15 @@ fn sync_layout_tree(
     >,
     computed_layout_query: &mut Query<&mut ComputedLayout>,
     fixed_node_changes: &EntityHashSet,
+    rem_size_changed: bool,
     child_stack: &mut Vec<NodeId>,
     needs_full_walk: bool,
     ghost_stack: &mut Vec<Entity>,
 ) -> Option<SubtreeState> {
     let Ok((
-        style,
+        node,
+        target,
+        em_size,
         content_size,
         has_fixed_node,
         transform,
@@ -509,6 +502,7 @@ fn sync_layout_tree(
             node_query,
             computed_layout_query,
             fixed_node_changes,
+            rem_size_changed,
             child_stack,
             needs_full_walk,
             ghost_stack,
@@ -536,7 +530,10 @@ fn sync_layout_tree(
 
     child_stack.truncate(start);
 
-    let own_dirty = style.is_changed()
+    let own_dirty = node.is_changed()
+        || target.is_changed()
+        || em_size.is_changed()
+        || rem_size_changed
         || children_changed
         || was_root != computed_layout.is_layout_root
         || content_size.is_changed()
@@ -590,7 +587,7 @@ struct ViewportLayoutState {
 }
 
 struct UiLayoutTree<'a, 'w, 's> {
-    style_query: &'a Query<'w, 's, &'static TaffyStyle>,
+    node_style_query: &'a NodeStyleQuery<'w, 's>,
     computed_layout_query: &'a mut Query<'w, 's, &'static mut ComputedLayout>,
     viewport_layout: ViewportLayoutState,
     viewport_children: [NodeId; 1],
@@ -598,7 +595,7 @@ struct UiLayoutTree<'a, 'w, 's> {
         taffy::Size<Option<f32>>,
         taffy::Size<AvailableSpace>,
         Entity,
-        &Style,
+        NodeStyle<'_>,
     ) -> taffy::Size<f32>,
     layout_changed: bool,
 }
@@ -629,7 +626,10 @@ impl UiLayoutTree<'_, '_, '_> {
         compute_cached_layout(self, node_id, inputs, |tree, node_id, inputs| {
             let has_children = tree.child_count(node_id) > 0;
 
-            match (tree.get_core_container_style(node_id).display, has_children) {
+            match (
+                tree.get_core_container_style(node_id).display(),
+                has_children,
+            ) {
                 (Display::None, _) => compute_hidden_layout(tree, node_id),
                 (Display::Block, true) => compute_block_layout(tree, node_id, inputs, block_ctx),
                 (Display::Flex, true) => compute_flexbox_layout(tree, node_id, inputs),
@@ -637,14 +637,17 @@ impl UiLayoutTree<'_, '_, '_> {
                 // There's no matching `FlowRoot` variant for `bevy_ui::Display`, so this is unreachable.
                 (Display::FlowRoot, _) => unreachable!(),
                 (_, false) => {
-                    let style = &tree
-                        .style_query
-                        .get(node_id_entity(node_id))
-                        .expect("missing layout style")
-                        .0;
+                    let style = if node_id == VIEWPORT_NODE_ID {
+                        VIEWPORT_NODE_STYLE
+                    } else {
+                        tree.node_style_query
+                            .get(node_id_entity(node_id))
+                            .expect("missing layout style")
+                    };
+
                     compute_leaf_layout(
                         inputs,
-                        style,
+                        &style,
                         |_, _| 0.0,
                         |known_dimensions, available_space| {
                             let entity = node_id_entity(node_id);
@@ -685,7 +688,7 @@ impl TraverseTree for UiLayoutTree<'_, '_, '_> {}
 
 impl<'tree, 'w, 's> LayoutPartialTree for UiLayoutTree<'tree, 'w, 's> {
     type CoreContainerStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
@@ -693,13 +696,11 @@ impl<'tree, 'w, 's> LayoutPartialTree for UiLayoutTree<'tree, 'w, 's> {
 
     fn get_core_container_style(&self, node_id: NodeId) -> Self::CoreContainerStyle<'_> {
         if node_id == VIEWPORT_NODE_ID {
-            &VIEWPORT_NODE_TAFFY_STYLE
+            VIEWPORT_NODE_STYLE
         } else {
-            &self
-                .style_query
+            self.node_style_query
                 .get(node_id_entity(node_id))
                 .expect("missing layout node")
-                .0
         }
     }
 
@@ -773,12 +774,12 @@ impl CacheTree for UiLayoutTree<'_, '_, '_> {
 
 impl<'tree, 'w, 's> LayoutBlockContainer for UiLayoutTree<'tree, 'w, 's> {
     type BlockContainerStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
     type BlockItemStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
@@ -803,12 +804,12 @@ impl<'tree, 'w, 's> LayoutBlockContainer for UiLayoutTree<'tree, 'w, 's> {
 
 impl<'tree, 'w, 's> LayoutFlexboxContainer for UiLayoutTree<'tree, 'w, 's> {
     type FlexboxContainerStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
     type FlexboxItemStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
@@ -823,12 +824,12 @@ impl<'tree, 'w, 's> LayoutFlexboxContainer for UiLayoutTree<'tree, 'w, 's> {
 
 impl<'tree, 'w, 's> LayoutGridContainer for UiLayoutTree<'tree, 'w, 's> {
     type GridContainerStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 
     type GridItemStyle<'a>
-        = &'a Style
+        = NodeStyle<'a>
     where
         Self: 'a;
 

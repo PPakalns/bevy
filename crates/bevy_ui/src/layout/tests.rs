@@ -1,20 +1,19 @@
 use crate::layout::{mark_dirty_ui_trees, update_ui_roots, UiRoots, UiTreeDirty};
 use crate::layout_tree::compute_layout;
-use crate::layout_tree::TaffyStyle;
+use crate::node_style::NodeStyleQuery;
 use crate::update_computed_nodes;
 use crate::UiSystems;
 use crate::{clear_transient_dirty_flags, update_border_radius};
 use crate::{
     layout::clipping::update_clipping_system, layout::layout_tree::ComputedLayout, prelude::*,
-    sync_font_size_to_em_size, sync_taffy_styles_with_nodes, ui_layout_system,
-    update::propagate_ui_target_cameras, ContentSize,
+    sync_font_size_to_em_size, ui_layout_system, update::propagate_ui_target_cameras, ContentSize,
 };
 use bevy_app::{App, HierarchyPropagatePlugin, PostUpdate, PropagateSet, TaskPoolPlugin};
 use bevy_camera::{Camera, Camera2d, ComputedCameraValues, RenderTargetInfo, Viewport};
 use bevy_ecs::entity::EntityHashSet;
 use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use bevy_math::{BVec2, Rect, UVec2, Vec2};
-use bevy_text::TextFont;
+use bevy_text::{EmSize, TextFont};
 use bevy_utils::prelude::default;
 
 const TARGET_WIDTH: u32 = 1000;
@@ -46,7 +45,6 @@ fn setup_ui_test_app() -> App {
             clear_transient_dirty_flags,
             update_ui_roots,
             sync_font_size_to_em_size,
-            sync_taffy_styles_with_nodes,
             mark_dirty_ui_trees,
             ui_layout_system,
             update_computed_nodes,
@@ -60,14 +58,14 @@ fn setup_ui_test_app() -> App {
         PostUpdate,
         PropagateSet::<ComputedUiTargetCamera>::default()
             .after(propagate_ui_target_cameras)
-            .before(sync_taffy_styles_with_nodes),
+            .before(mark_dirty_ui_trees),
     );
 
     app.configure_sets(
         PostUpdate,
         PropagateSet::<ComputedUiRenderTargetInfo>::default()
             .after(propagate_ui_target_cameras)
-            .before(sync_taffy_styles_with_nodes),
+            .before(mark_dirty_ui_trees),
     );
 
     app.world_mut().spawn((
@@ -491,7 +489,9 @@ fn compute_layout_uses_camera_viewport() {
         ui_children: Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
         node_query: Query<
             (
-                Ref<TaffyStyle>,
+                Ref<Node>,
+                Ref<ComputedUiRenderTargetInfo>,
+                Ref<EmSize>,
                 Ref<ContentSize>,
                 Has<FixedNode>,
                 Ref<UiTransform>,
@@ -504,7 +504,7 @@ fn compute_layout_uses_camera_viewport() {
             ),
             With<Node>,
         >,
-        style_query: Query<&'static TaffyStyle>,
+        node_style_query: NodeStyleQuery,
         mut node_queries: ParamSet<(Query<&mut ComputedLayout>,)>,
         mut buffer_query: Query<&mut bevy_text::ComputedTextBlock>,
         mut font_system: ResMut<bevy_text::FontCx>,
@@ -516,7 +516,7 @@ fn compute_layout_uses_camera_viewport() {
             UVec2::new(800, 600),
             &ui_children,
             &node_query,
-            &style_query,
+            &node_style_query,
             &mut node_queries.p0(),
             &EntityHashSet::default(),
             &mut buffer_query,

@@ -4,9 +4,11 @@ use bevy_reflect::{std_traits::ReflectDefault, Reflect};
 use bevy_text::FontCx;
 use core::fmt::Formatter;
 pub use taffy::style::AvailableSpace;
+use taffy::CoreStyle;
 use taffy::MaybeMath;
 use taffy::MaybeResolve;
 
+use crate::layout::node_style::NodeStyle;
 use crate::widget::ImageMeasure;
 
 use crate::widget::TextMeasure;
@@ -32,7 +34,7 @@ pub struct MeasureArgs<'a> {
     /// Text layout buffer used to compute intrinsic text size when required.
     pub buffer: Option<&'a mut bevy_text::ComputedTextBlock>,
     /// Resolved style for this node in physical pixels.
-    pub style: &'a taffy::Style,
+    pub style: NodeStyle<'a>,
 }
 
 #[derive(Copy, Clone)]
@@ -74,9 +76,9 @@ impl MeasureArgs<'_> {
         resolve_axis(
             self.known_width,
             self.available_width,
-            self.style.min_size.width,
-            self.style.size.width,
-            self.style.max_size.width,
+            self.style.min_size().width,
+            self.style.size().width,
+            self.style.max_size().width,
         )
     }
 
@@ -85,9 +87,9 @@ impl MeasureArgs<'_> {
         resolve_axis(
             self.known_height,
             self.available_height,
-            self.style.min_size.height,
-            self.style.size.height,
-            self.style.max_size.height,
+            self.style.min_size().height,
+            self.style.size().height,
+            self.style.max_size().height,
         )
     }
 }
