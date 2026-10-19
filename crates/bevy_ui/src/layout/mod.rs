@@ -1,5 +1,5 @@
 use crate::{
-    layout_tree::compute_layout,
+    layout_tree::{compute_layout, TaffyStyleChanged},
     node_style::NodeStyleQuery,
     ui_transform::{UiGlobalTransform, UiTransform},
     ComputedNode, ComputedUiRenderTargetInfo, ContentSize, Display, FixedNode, GhostNode,
@@ -238,20 +238,40 @@ pub fn sync_font_size_to_em_size(
     }
 }
 
+/// Touches [`TaffyStyleChanged`] whenever the taffy-relevant parts of a `Node`'s effective style change.
+///
+/// Runs in [`UiSystems::Layout`](`super::UiSystems::Layout`).
+pub fn mark_taffy_style_changed(
+    rem_size: Res<RemSize>,
+    mut query: Query<(
+        Ref<Node>,
+        Ref<ComputedUiRenderTargetInfo>,
+        Ref<EmSize>,
+        &mut TaffyStyleChanged,
+    )>,
+) {
+    let rem_size_changed = rem_size.is_changed();
+    query
+        .par_iter_mut()
+        .for_each(|(node, target, em_size, mut style_changed)| {
+            if rem_size_changed || node.is_changed() || target.is_changed() || em_size.is_changed()
+            {
+                style_changed.set_changed();
+            }
+        });
+}
+
 /// Identify entities whose UI layout input components have been changed, added or removed.
 /// Mark their `UiTreeDirty` component changed, then walk up the tree and mark
 /// each ancestor's `UiTreeDirty` changed.
 ///
 /// Runs in [`UiSystems::Layout`](`super::UiSystems::Layout`).
 pub fn mark_dirty_ui_trees(
-    rem_size: Res<RemSize>,
     changed_ui_components_query: Query<
         Entity,
         (
             Or<(
-                Changed<Node>,
-                Changed<ComputedUiRenderTargetInfo>,
-                Changed<EmSize>,
+                Changed<TaffyStyleChanged>,
                 Changed<ContentSize>,
                 Changed<UiTransform>,
                 Changed<ScrollPosition>,
@@ -282,14 +302,6 @@ pub fn mark_dirty_ui_trees(
         Option<&ChildOf>,
     )>,
 ) {
-    // `Val::Rem` depends on the global `RemSize`, so a change to it dirties every node.
-    if rem_size.is_changed() {
-        for (mut dirty_tree, ..) in &mut trees {
-            dirty_tree.set_changed();
-        }
-        return;
-    }
-
     let removed = removed_outlines
         .read()
         .chain(removed_layout_configs.read())
@@ -334,9 +346,7 @@ pub fn ui_layout_system(
     target_query: Query<Ref<ComputedUiRenderTargetInfo>>,
     node_query: Query<
         (
-            Ref<Node>,
-            Ref<ComputedUiRenderTargetInfo>,
-            Ref<EmSize>,
+            Ref<TaffyStyleChanged>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,

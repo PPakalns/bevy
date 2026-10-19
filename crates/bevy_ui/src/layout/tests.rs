@@ -1,5 +1,7 @@
-use crate::layout::{mark_dirty_ui_trees, update_ui_roots, UiRoots, UiTreeDirty};
-use crate::layout_tree::compute_layout;
+use crate::layout::{
+    mark_dirty_ui_trees, mark_taffy_style_changed, update_ui_roots, UiRoots, UiTreeDirty,
+};
+use crate::layout_tree::{compute_layout, TaffyStyleChanged};
 use crate::node_style::NodeStyleQuery;
 use crate::update_computed_nodes;
 use crate::UiSystems;
@@ -13,7 +15,7 @@ use bevy_camera::{Camera, Camera2d, ComputedCameraValues, RenderTargetInfo, View
 use bevy_ecs::entity::EntityHashSet;
 use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use bevy_math::{BVec2, Rect, UVec2, Vec2};
-use bevy_text::{EmSize, TextFont};
+use bevy_text::TextFont;
 use bevy_utils::prelude::default;
 
 const TARGET_WIDTH: u32 = 1000;
@@ -45,6 +47,7 @@ fn setup_ui_test_app() -> App {
             clear_transient_dirty_flags,
             update_ui_roots,
             sync_font_size_to_em_size,
+            mark_taffy_style_changed,
             mark_dirty_ui_trees,
             ui_layout_system,
             update_computed_nodes,
@@ -58,14 +61,14 @@ fn setup_ui_test_app() -> App {
         PostUpdate,
         PropagateSet::<ComputedUiTargetCamera>::default()
             .after(propagate_ui_target_cameras)
-            .before(mark_dirty_ui_trees),
+            .before(mark_taffy_style_changed),
     );
 
     app.configure_sets(
         PostUpdate,
         PropagateSet::<ComputedUiRenderTargetInfo>::default()
             .after(propagate_ui_target_cameras)
-            .before(mark_dirty_ui_trees),
+            .before(mark_taffy_style_changed),
     );
 
     app.world_mut().spawn((
@@ -489,9 +492,7 @@ fn compute_layout_uses_camera_viewport() {
         ui_children: Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
         node_query: Query<
             (
-                Ref<Node>,
-                Ref<ComputedUiRenderTargetInfo>,
-                Ref<EmSize>,
+                Ref<TaffyStyleChanged>,
                 Ref<ContentSize>,
                 Has<FixedNode>,
                 Ref<UiTransform>,

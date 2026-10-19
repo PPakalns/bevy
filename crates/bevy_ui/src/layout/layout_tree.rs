@@ -8,7 +8,7 @@ use bevy_ecs::{
     world::Ref,
 };
 use bevy_math::{UVec2, Vec2};
-use bevy_text::{ComputedTextBlock, EmSize, FontCx};
+use bevy_text::{ComputedTextBlock, FontCx};
 use taffy::{
     compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
     compute_hidden_layout, compute_leaf_layout, compute_root_layout, round_layout,
@@ -19,12 +19,11 @@ use taffy::{
 };
 
 use crate::{
-    layout::UiTreeDirty, AlignContent, AlignItems, AlignSelf, BorderRadius, BoxSizing,
-    ComputedUiRenderTargetInfo, ContentSize, FixedNode, FlexDirection, FlexWrap, GhostNode,
-    GridAutoFlow, GridPlacement, IgnoreScroll, InlineDirection, JustifyContent, JustifyItems,
-    JustifySelf, LayoutConfig, LayoutError, Measure, MeasureArgs, Node, NodeMeasure, Outline,
-    Overflow, OverflowClipMargin, OverrideClip, PositionType, ScrollPosition, UiRect, UiTransform,
-    Val,
+    layout::UiTreeDirty, AlignContent, AlignItems, AlignSelf, BorderRadius, BoxSizing, ContentSize,
+    FixedNode, FlexDirection, FlexWrap, GhostNode, GridAutoFlow, GridPlacement, IgnoreScroll,
+    InlineDirection, JustifyContent, JustifyItems, JustifySelf, LayoutConfig, LayoutError, Measure,
+    MeasureArgs, Node, NodeMeasure, Outline, Overflow, OverflowClipMargin, OverrideClip,
+    PositionType, ScrollPosition, UiRect, UiTransform, Val,
 };
 
 use super::{
@@ -81,6 +80,10 @@ pub(super) const VIEWPORT_NODE_STYLE: NodeStyle<'static> = NodeStyle {
     node: &VIEWPORT_NODE,
     context: LayoutContext::DEFAULT,
 };
+
+/// Marker component, touched whenever the taffy-relevant parts of a `Node`'s effective style change.
+#[derive(Component, Default)]
+pub struct TaffyStyleChanged;
 
 /// `NodeId`s wrap a `u64` that can be directly converted to and from an `Entity`.
 /// We create and assign the `NodeId`s ourselves in order that each `NodeId` corresponds to an `Entity`.
@@ -288,9 +291,7 @@ pub fn compute_layout<'w, 's>(
     ui_children: &Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
     node_query: &Query<
         (
-            Ref<Node>,
-            Ref<ComputedUiRenderTargetInfo>,
-            Ref<EmSize>,
+            Ref<TaffyStyleChanged>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,
@@ -312,7 +313,6 @@ pub fn compute_layout<'w, 's>(
     needs_full_walk: bool,
     ghost_stack: &mut Vec<Entity>,
 ) -> Result<(), LayoutError> {
-    let rem_size_changed = node_style_query.rem_size_changed();
     let Some(subtree_state) = sync_layout_tree(
         ui_root_entity,
         ui_root_entity,
@@ -320,7 +320,6 @@ pub fn compute_layout<'w, 's>(
         node_query,
         computed_layout_query,
         fixed_node_changes,
-        rem_size_changed,
         child_stack,
         needs_full_walk,
         ghost_stack,
@@ -344,7 +343,7 @@ pub fn compute_layout<'w, 's>(
                                     available_space: taffy::Size<AvailableSpace>,
                                     entity: Entity,
                                     style: NodeStyle<'_>| {
-            let Ok((_, _, _, content_size, ..)) = node_query.get(entity) else {
+            let Ok((_, content_size, ..)) = node_query.get(entity) else {
                 return taffy::Size::ZERO;
             };
             let Some(measure) = content_size.measure.as_ref() else {
@@ -435,9 +434,7 @@ fn sync_layout_tree(
     ui_children: &Query<(Option<&Children>, Has<GhostNode>, Ref<UiTreeDirty>), With<Node>>,
     node_query: &Query<
         (
-            Ref<Node>,
-            Ref<ComputedUiRenderTargetInfo>,
-            Ref<EmSize>,
+            Ref<TaffyStyleChanged>,
             Ref<ContentSize>,
             Has<FixedNode>,
             Ref<UiTransform>,
@@ -452,15 +449,12 @@ fn sync_layout_tree(
     >,
     computed_layout_query: &mut Query<&mut ComputedLayout>,
     fixed_node_changes: &EntityHashSet,
-    rem_size_changed: bool,
     child_stack: &mut Vec<NodeId>,
     needs_full_walk: bool,
     ghost_stack: &mut Vec<Entity>,
 ) -> Option<SubtreeState> {
     let Ok((
-        node,
-        target,
-        em_size,
+        style_changed,
         content_size,
         has_fixed_node,
         transform,
@@ -502,7 +496,6 @@ fn sync_layout_tree(
             node_query,
             computed_layout_query,
             fixed_node_changes,
-            rem_size_changed,
             child_stack,
             needs_full_walk,
             ghost_stack,
@@ -530,10 +523,7 @@ fn sync_layout_tree(
 
     child_stack.truncate(start);
 
-    let own_dirty = node.is_changed()
-        || target.is_changed()
-        || em_size.is_changed()
-        || rem_size_changed
+    let own_dirty = style_changed.is_changed()
         || children_changed
         || was_root != computed_layout.is_layout_root
         || content_size.is_changed()

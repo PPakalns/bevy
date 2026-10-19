@@ -203,6 +203,7 @@ impl Plugin for UiPlugin {
                 clear_transient_dirty_flags.in_set(UiSystems::Prepare),
                 (
                     update_ui_roots,
+                    mark_taffy_style_changed,
                     mark_dirty_ui_trees,
                     ui_layout_system.ambiguous_with(bevy_sprite::update_text2d_layout),
                     update_computed_nodes,
