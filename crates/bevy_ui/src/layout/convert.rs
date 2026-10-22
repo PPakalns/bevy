@@ -9,6 +9,7 @@ use crate::{
 use super::LayoutContext;
 
 impl Val {
+    #[inline(always)]
     pub(super) fn into_length_percentage_auto(
         self,
         context: &LayoutContext,
@@ -32,6 +33,7 @@ impl Val {
         }
     }
 
+    #[inline(always)]
     pub(super) fn into_length_percentage(
         self,
         context: &LayoutContext,
@@ -62,6 +64,7 @@ impl Val {
     //
     // * A non-zero border smaller than one physical pixel is rounded up to one pixel.
     // * A border larger than one physical pixel is rounded down to a whole pixel.
+    #[inline(always)]
     pub(super) fn into_length_percentage_for_border(
         self,
         context: &LayoutContext,
@@ -76,12 +79,14 @@ impl Val {
         }
     }
 
+    #[inline(always)]
     pub(super) fn into_dimension(self, context: &LayoutContext) -> taffy::style::Dimension {
         self.into_length_percentage_auto(context).into()
     }
 }
 
 impl UiRect {
+    #[inline(always)]
     pub(super) fn map_to_taffy_rect<T>(
         self,
         map_fn: impl Fn(Val) -> T,
@@ -96,6 +101,7 @@ impl UiRect {
 }
 
 impl From<AlignItems> for Option<taffy::style::AlignItems> {
+    #[inline(always)]
     fn from(value: AlignItems) -> Self {
         match value {
             AlignItems::Default => None,
@@ -116,6 +122,7 @@ impl From<AlignItems> for Option<taffy::style::AlignItems> {
 }
 
 impl From<JustifyItems> for Option<taffy::style::JustifyItems> {
+    #[inline(always)]
     fn from(value: JustifyItems) -> Self {
         match value {
             JustifyItems::Default => None,
@@ -132,6 +139,7 @@ impl From<JustifyItems> for Option<taffy::style::JustifyItems> {
 }
 
 impl From<AlignSelf> for Option<taffy::style::AlignSelf> {
+    #[inline(always)]
     fn from(value: AlignSelf) -> Self {
         match value {
             AlignSelf::Auto => None,
@@ -152,6 +160,7 @@ impl From<AlignSelf> for Option<taffy::style::AlignSelf> {
 }
 
 impl From<JustifySelf> for Option<taffy::style::JustifySelf> {
+    #[inline(always)]
     fn from(value: JustifySelf) -> Self {
         match value {
             JustifySelf::Auto => None,
@@ -168,6 +177,7 @@ impl From<JustifySelf> for Option<taffy::style::JustifySelf> {
 }
 
 impl From<AlignContent> for Option<taffy::style::AlignContent> {
+    #[inline(always)]
     fn from(value: AlignContent) -> Self {
         match value {
             AlignContent::Default => None,
@@ -190,6 +200,7 @@ impl From<AlignContent> for Option<taffy::style::AlignContent> {
 }
 
 impl From<JustifyContent> for Option<taffy::style::JustifyContent> {
+    #[inline(always)]
     fn from(value: JustifyContent) -> Self {
         match value {
             JustifyContent::Default => None,
@@ -212,6 +223,7 @@ impl From<JustifyContent> for Option<taffy::style::JustifyContent> {
 }
 
 impl From<InlineDirection> for taffy::style::Direction {
+    #[inline(always)]
     fn from(direction: InlineDirection) -> Self {
         match direction {
             InlineDirection::Ltr => taffy::style::Direction::Ltr,
@@ -221,6 +233,7 @@ impl From<InlineDirection> for taffy::style::Direction {
 }
 
 impl From<Display> for taffy::style::Display {
+    #[inline(always)]
     fn from(value: Display) -> Self {
         match value {
             Display::Flex => taffy::style::Display::Flex,
@@ -232,6 +245,7 @@ impl From<Display> for taffy::style::Display {
 }
 
 impl From<BoxSizing> for taffy::style::BoxSizing {
+    #[inline(always)]
     fn from(value: BoxSizing) -> Self {
         match value {
             BoxSizing::BorderBox => taffy::style::BoxSizing::BorderBox,
@@ -241,6 +255,7 @@ impl From<BoxSizing> for taffy::style::BoxSizing {
 }
 
 impl From<OverflowAxis> for taffy::style::Overflow {
+    #[inline(always)]
     fn from(value: OverflowAxis) -> Self {
         match value {
             OverflowAxis::Visible => taffy::style::Overflow::Visible,
@@ -252,6 +267,7 @@ impl From<OverflowAxis> for taffy::style::Overflow {
 }
 
 impl From<FlexDirection> for taffy::style::FlexDirection {
+    #[inline(always)]
     fn from(value: FlexDirection) -> Self {
         match value {
             FlexDirection::Row => taffy::style::FlexDirection::Row,
@@ -263,6 +279,7 @@ impl From<FlexDirection> for taffy::style::FlexDirection {
 }
 
 impl From<PositionType> for taffy::style::Position {
+    #[inline(always)]
     fn from(value: PositionType) -> Self {
         match value {
             PositionType::Relative => taffy::style::Position::Relative,
@@ -272,6 +289,7 @@ impl From<PositionType> for taffy::style::Position {
 }
 
 impl From<FlexWrap> for taffy::style::FlexWrap {
+    #[inline(always)]
     fn from(value: FlexWrap) -> Self {
         match value {
             FlexWrap::NoWrap => taffy::style::FlexWrap::NoWrap,
@@ -282,6 +300,7 @@ impl From<FlexWrap> for taffy::style::FlexWrap {
 }
 
 impl From<GridAutoFlow> for taffy::style::GridAutoFlow {
+    #[inline(always)]
     fn from(value: GridAutoFlow) -> Self {
         match value {
             GridAutoFlow::Row => taffy::style::GridAutoFlow::Row,
@@ -293,6 +312,7 @@ impl From<GridAutoFlow> for taffy::style::GridAutoFlow {
 }
 
 impl From<GridPlacement> for taffy::geometry::Line<taffy::style::GridPlacement<String>> {
+    #[inline(always)]
     fn from(value: GridPlacement) -> Self {
         let span = value.get_span().unwrap_or(1);
         match (value.get_start(), value.get_end()) {
@@ -314,6 +334,7 @@ impl From<GridPlacement> for taffy::geometry::Line<taffy::style::GridPlacement<S
 }
 
 impl MinTrackSizingFunction {
+    #[inline(always)]
     fn into_taffy(self, context: &LayoutContext) -> taffy::style::MinTrackSizingFunction {
         match self {
             MinTrackSizingFunction::Px(val) => Val::Px(val).into_length_percentage(context).into(),
@@ -344,6 +365,7 @@ impl MinTrackSizingFunction {
 }
 
 impl MaxTrackSizingFunction {
+    #[inline(always)]
     fn into_taffy(self, context: &LayoutContext) -> taffy::style::MaxTrackSizingFunction {
         match self {
             MaxTrackSizingFunction::Px(val) => Val::Px(val).into_length_percentage(context).into(),
@@ -393,6 +415,7 @@ impl MaxTrackSizingFunction {
 }
 
 impl GridTrack {
+    #[inline(always)]
     pub(super) fn into_taffy_track(
         self,
         context: &LayoutContext,

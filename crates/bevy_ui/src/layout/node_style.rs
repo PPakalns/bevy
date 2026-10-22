@@ -26,6 +26,7 @@ impl<'a> NodeStyle<'a> {
     }
 
     /// Retrieve corresponding [`taffy::Display`]
+    #[inline(always)]
     pub fn display(&self) -> taffy::Display {
         self.node.display.into()
     }
@@ -516,6 +517,7 @@ impl<'w, 's> NodeStyleQuery<'w, 's> {
 pub struct EmptyLineNames<'a>(PhantomData<&'a ()>);
 
 impl<'a> EmptyLineNames<'a> {
+    #[inline(always)]
     fn new() -> Self {
         Self(PhantomData)
     }
